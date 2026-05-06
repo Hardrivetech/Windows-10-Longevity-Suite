@@ -132,8 +132,10 @@ function Invoke-SetupFlow {
 }
 
 function Register-MaintenanceTask {
-    param($ScriptDir, $TaskName)
-    $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -NoProfile -File `"$ScriptDir\master.ps1`""
+    param($ScriptDir, $TaskName, [bool]$DryRun)
+    $Argument = "-NoProfile -File `"$ScriptDir\master.ps1`""
+    if ($DryRun) { $Argument += " -DryRun" }
+    $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $Argument
     $Trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 2am
     $Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
     $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
@@ -235,7 +237,7 @@ try {
         Save-SuiteConfig -ConfigObject $Config -Path $ConfigFile
 
         Write-Host "`n[7/7] Registering Task Scheduler..." -ForegroundColor Yellow
-        Register-MaintenanceTask -ScriptDir $ScriptDir -TaskName $TaskName
+        Register-MaintenanceTask -ScriptDir $ScriptDir -TaskName $TaskName -DryRun $Config.DryRun
         Write-Host "Task '$TaskName' registered for Sundays at 2:00 AM." -ForegroundColor Green
 
         Write-Host "`nSetup complete! Your Windows 10 Longevity Suite is ready." -ForegroundColor Cyan

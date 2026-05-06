@@ -11,6 +11,14 @@ if (!(Test-Path (Split-Path $LogPath))) { New-Item -ItemType Directory -Path (Sp
 Start-Transcript -Path $LogPath -Append
 Write-Host "Data Scouring (Scrubber): Cleaning Browser Caches..." -ForegroundColor Cyan
 
+# --- CONFIGURATION ---
+$ConfigPath = Join-Path $PSScriptRoot "config.json"
+$DryRun = $false
+if (Test-Path $ConfigPath) {
+    $Config = Get-Content $ConfigPath | ConvertFrom-Json # NASA Rule 5: Assert valid JSON
+    if ($null -ne $Config.DryRun) { $DryRun = $Config.DryRun }
+}
+
 try {
     # Chromium-based browsers (Chrome/Edge)
     $Browsers = @(
@@ -26,7 +34,8 @@ try {
             if (Test-Path $Browser.Path) {
                 Write-Host "Cleaning $($Browser.Name)..." -ForegroundColor Yellow
                 # NASA Rule 7: Check return values
-                Remove-Item -Path "$($Browser.Path)\*" -Recurse -Force -ErrorAction SilentlyContinue
+                if ($DryRun) { Write-Host "[DRY RUN] Would remove items from $($Browser.Path)" -ForegroundColor Gray }
+                else { Remove-Item -Path "$($Browser.Path)\*" -Recurse -Force -ErrorAction SilentlyContinue }
             }
         }
     }
@@ -38,11 +47,14 @@ try {
         $FFProfiles = Get-ChildItem -Path $FFPath -Directory -ErrorAction SilentlyContinue
         if ($null -ne $FFProfiles) {
             Write-Host "Cleaning Firefox profiles..." -ForegroundColor Yellow
-            foreach ($FFProfile in $FFProfiles) {
+            $ProfileCount = @($FFProfiles).Count
+            for ($j = 0; $j -lt $ProfileCount; $j++) {
+                $FFProfile = $FFProfiles[$j]
                 $CachePath = Join-Path $FFProfile.FullName "cache2"
                 if (Test-Path $CachePath) {
                     # NASA Rule 7: Check return values
-                    Remove-Item -Path "$CachePath\*" -Recurse -Force -ErrorAction SilentlyContinue
+                    if ($DryRun) { Write-Host "[DRY RUN] Would remove items from $CachePath" -ForegroundColor Gray }
+                    else { Remove-Item -Path "$CachePath\*" -Recurse -Force -ErrorAction SilentlyContinue }
                 }
             }
         }

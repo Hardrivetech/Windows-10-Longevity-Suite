@@ -8,9 +8,11 @@ Set-StrictMode -Version Latest
 # --- CONFIGURATION ---
 $ConfigPath = Join-Path $PSScriptRoot "config.json"
 $BackupDestination = "D:\Backups\SystemMaintenance" # Fallback
+$DryRun = $false
 if (Test-Path $ConfigPath) {
     $Config = Get-Content $ConfigPath | ConvertFrom-Json
     if ($Config.BackupDestination) { $BackupDestination = $Config.BackupDestination }
+    if ($null -ne $Config.DryRun) { $DryRun = $Config.DryRun }
 }
 
 $LogPath = "$env:SystemDrive\Scripts\Logs\Archivist.log"
@@ -41,8 +43,12 @@ try {
             $Dest = Join-Path $BackupDestination $FolderName
             
             Write-Host "Mirroring $FolderName (Source: $Source)..." -ForegroundColor Yellow
-            # NASA Rule 7: Robocopy return codes are handled by the shell, but we log the operation
-            & robocopy $Source $Dest /MIR /R:3 /W:5 /MT:32 /LOG+:$LogPath /NP /TEE
+            if ($DryRun) {
+                Write-Host "[DRY RUN] Would execute: robocopy $Source $Dest /MIR /R:3 /W:5 /MT:32 /LOG+:$LogPath /NP /TEE" -ForegroundColor Gray
+            } else {
+                # NASA Rule 7: Robocopy return codes are handled by the shell, but we log the operation
+                & robocopy $Source $Dest /MIR /R:3 /W:5 /MT:32 /LOG+:$LogPath /NP /TEE
+            }
         }
     }
 }

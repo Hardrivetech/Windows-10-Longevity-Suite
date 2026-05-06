@@ -60,6 +60,8 @@ Describe "Setup.ps1 Script Functionality" {
             $ConfigContent.BackupDestination | Should Be "D:\Backups\SystemMaintenance" `
                 -Because "BackupDestination should be default"
             $ConfigContent.Email.EnableEmailReport | Should Be $false `
+            $ConfigContent.DryRun | Should Be $false `
+                -Because "DryRun should be disabled by default"
                 -Because "Email reports should be disabled"
             Test-Path $CredentialFile | Should Be $false `
                 -Because "Credential file should not be created if email is disabled"
@@ -75,6 +77,7 @@ Describe "Setup.ps1 Script Functionality" {
                 param($Prompt)
                 switch ($Prompt) {
                     "Choose an action" { return "setup" }
+                    "Enable Dry Run mode (No changes made)?" { return "y" }
                     "Enter backup destination path (Default: D:\Backups\SystemMaintenance)" { return "C:\MyBackup" }
                     "CPU Usage Alert Threshold % (Default: 70)" { return "80" }
                     "Memory Usage Alert Threshold MB (Default: 500)" { return "1024" }
@@ -109,6 +112,8 @@ Describe "Setup.ps1 Script Functionality" {
             Test-Path $CredentialFile | Should Be $true
 
             $ConfigContent = Get-Content $ConfigFile | ConvertFrom-Json
+            $ConfigContent.DryRun | Should Be $true `
+                -Because "DryRun should be enabled"
             $ConfigContent.BackupDestination | Should Be "C:\MyBackup"
             $ConfigContent.CPUThresholdPercent | Should Be 80
             $ConfigContent.Email.EnableEmailReport | Should Be $true

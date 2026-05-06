@@ -12,6 +12,14 @@ Start-Transcript -Path $LogPath -Append
 
 Write-Host "Checking for Deliveries (Courier)..." -ForegroundColor Cyan
 
+# --- CONFIGURATION ---
+$ConfigPath = Join-Path $PSScriptRoot "config.json"
+$DryRun = $false
+if (Test-Path $ConfigPath) {
+    $Config = Get-Content $ConfigPath | ConvertFrom-Json # NASA Rule 5: Assert valid JSON
+    if ($null -ne $Config.DryRun) { $DryRun = $Config.DryRun }
+}
+
 try {
     # NASA Rule 7: Check return values for COM object creation
     $UpdateSession = New-Object -ComObject Microsoft.Update.Session

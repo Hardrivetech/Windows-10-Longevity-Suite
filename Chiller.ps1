@@ -12,6 +12,14 @@ Start-Transcript -Path $LogPath -Append
 
 Write-Host "Starting Thermal Surveillance (Chiller)..." -ForegroundColor Cyan
 
+# --- CONFIGURATION ---
+$ConfigPath = Join-Path $PSScriptRoot "config.json"
+$DryRun = $false
+if (Test-Path $ConfigPath) {
+    $Config = Get-Content $ConfigPath | ConvertFrom-Json # NASA Rule 5: Assert valid JSON
+    if ($null -ne $Config.DryRun) { $DryRun = $Config.DryRun }
+}
+
 try {
     # 1. Get Temperature (MSAcpi_ThermalZoneTemperature)
     $ThermalZones = Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue
@@ -55,7 +63,7 @@ try {
 
 
     # Exit with error code if critical heat or throttling is detected
-    if ($ThrottlingDetected) {
+    if ($ThrottlingDetected -and -not $DryRun) {
         Stop-Transcript
         exit 1
     }

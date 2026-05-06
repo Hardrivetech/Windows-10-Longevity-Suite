@@ -42,6 +42,7 @@ $Config = Get-Content $ConfigFile | ConvertFrom-Json
 # Extract email settings
 # NASA Rule 5: Assert configuration is valid against schema
 . (Join-Path $ScriptDir "Get-SuiteConfigSchema.ps1") # Dot-source the schema definition
+
 Test-ConfigSchema -ConfigToValidate $Config -ExpectedSchema (Get-SuiteConfigSchema)
 
 if ($null -eq $Config.Email) {
@@ -54,6 +55,7 @@ $FromEmail  = $Config.Email.FromEmail
 $ToEmail    = $Config.Email.ToEmail
 $EmailUser  = $Config.Email.EmailUser
 $UseSSL     = $true # Hardcoded for security best practice
+$DryRun     = $Config.DryRun
 
 # Function to send a Windows Toast Notification
 function Send-ToastNotification {
@@ -143,6 +145,7 @@ function Test-ConfigSchema {
         # Basic type checking (can be extended for deeper validation)
         if ($ExpectedType -eq [PSCustomObject]) {
             # Recursively validate nested objects
+            # NASA Rule 5: Assert recursive call is valid
             if (-not (Test-ConfigSchema -ConfigToValidate $ActualValue -ExpectedSchema $Prop.Value)) {
                 $Errors.Add("Nested object '$PropName' failed validation.")
                 $IsValid = $false
@@ -214,6 +217,10 @@ for ($i = 0; $i -lt $TaskCount; $i++) {
         # This supports the 'AllSigned' recommendation in the README.
         $ExecutionArgs = "-NoProfile -File `"$FullPath`""
         
+        if ($DryRun) {
+            $ExecutionArgs += " -DryRun" # Pass DryRun flag to sub-scripts
+        }
+
         $Process = Start-Process powershell.exe -ArgumentList $ExecutionArgs -Wait -PassThru -NoNewWindow -WindowStyle Hidden -Priority $Config.Master.ScriptExecutionPriority
         $TaskTimer.Stop()
         
@@ -264,10 +271,25 @@ if ($Config.Master.EnableHeartbeat) {
 Write-Host "`n================================================" -ForegroundColor Cyan
 Write-Host "   SUMMARY REPORT                              " -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
+# NASA Rule 4: Extract complex reporting to a discrete function
+function Invoke-SuiteReporting {
+    param($Results, $EnableEmail, $Attachments)
 
 $TaskResults | Format-Table -AutoSize
+    Write-Host "`n================================================" -ForegroundColor Cyan
+    Write-Host "   SUMMARY REPORT                              " -ForegroundColor Cyan
+    Write-Host "================================================" -ForegroundColor Cyan
+    $Results | Format-Table -AutoSize
 
 Write-Host "`nMaster Orchestration Finished at: $(Get-Date)" -ForegroundColor Gray
+    if ($EnableEmail) {
+        Write-Host "`nSending Email Report..." -ForegroundColor Cyan
+        try {
+            $Header = "<style>table{border-collapse:collapse;width:100%;font-family:Arial;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#008B8B;color:white;}</style>"
+            $HtmlBody = $Results | ConvertTo-Html -Head $Header -PreContent "<h2>Maintenance Summary: $(hostname)</h2>"
+            
+            $SecurePass = if (Test-Path $CredentialFile) { Get-Content $CredentialFile | ConvertTo-SecureString } else { $null }
+            $Creds = if ($null -ne $SecurePass) { New-Object System.Management.Automation.PSCredential($EmailUser, $SecurePass) } else { $null }
 
 # --- EMAIL REPORT GENERATION ---
 if ($EnableEmailReport) {
@@ -287,6 +309,21 @@ if ($EnableEmailReport) {
             Write-Warning "SMTP credential file not found. Cannot send email securely."
             # If no credential file, try sending without credentials (might fail depending on SMTP server)
             $Creds = $null
+            $MailParams = @{
+                SmtpServer  = $SmtpServer
+                Port        = $SmtpPort
+                From        = $FromEmail
+                To          = $ToEmail
+                Subject     = "Windows Maintenance Report - $(hostname)"
+                Body        = $HtmlBody | Out-String
+                BodyAsHtml  = $true
+                Credential  = $Creds
+                Attachments = $Attachments
+                UseSsl      = $UseSSL
+                ErrorAction = "Stop"
+            }
+            Send-MailMessage @MailParams
+            Write-Host "Email report sent successfully." -ForegroundColor Green
         }
 
         $MailParams = @{
@@ -305,10 +342,15 @@ if ($EnableEmailReport) {
         
         Send-MailMessage @MailParams
         Write-Host "Email report sent successfully." -ForegroundColor Green
+        catch { Write-Error "Failed to send email report: $_" }
     }
     catch {
         Write-Error "Failed to send email report: $_"
     }
 }
+
+Invoke-SuiteReporting -Results $TaskResults -EnableEmail $EnableEmailReport -Attachments $AttachmentPaths
+
+Write-Host "`nMaster Orchestration Finished at: $(Get-Date)" -ForegroundColor Gray
 
 Stop-Transcript

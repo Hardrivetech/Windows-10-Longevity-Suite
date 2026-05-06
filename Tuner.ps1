@@ -10,6 +10,14 @@ Start-Transcript -Path $LogPath -Append
 
 Write-Host "Starting Drive Optimization..." -ForegroundColor Cyan
 
+# --- CONFIGURATION ---
+$ConfigPath = Join-Path $PSScriptRoot "config.json"
+$DryRun = $false
+if (Test-Path $ConfigPath) {
+    $Config = Get-Content $ConfigPath | ConvertFrom-Json # NASA Rule 5: Assert valid JSON
+    if ($null -ne $Config.DryRun) { $DryRun = $Config.DryRun }
+}
+
 try {
     # Get all fixed local drives
     $Drives = Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter -ne $null }
@@ -22,8 +30,12 @@ try {
         # NASA Rule 5: Assert DriveLetter is not null
         if ($null -ne $Drive.DriveLetter) {
             Write-Host "Optimizing Volume $($Drive.DriveLetter)..."
-            # NASA Rule 7: Check return values
-            Optimize-Volume -DriveLetter $Drive.DriveLetter -Verbose -ErrorAction SilentlyContinue
+            if ($DryRun) {
+                Write-Host "[DRY RUN] Would optimize volume $($Drive.DriveLetter)" -ForegroundColor Gray
+            } else {
+                # NASA Rule 7: Check return values
+                Optimize-Volume -DriveLetter $Drive.DriveLetter -Verbose -ErrorAction SilentlyContinue
+            }
         }
     }
 }

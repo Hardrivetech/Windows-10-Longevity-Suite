@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 
 function Get-SuiteConfigSchema {
     return [PSCustomObject]@{
+        # Add DryRun to the schema
         DryRun = [bool]$false
         BackupDestination = [string]::Empty
         CPUThresholdPercent = [int]0

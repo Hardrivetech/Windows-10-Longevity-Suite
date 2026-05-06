@@ -15,9 +15,11 @@ Write-Host "Starting Disk Capacity Survey (Surveyor)..." -ForegroundColor Cyan
 # --- CONFIGURATION ---
 $ConfigPath = Join-Path $PSScriptRoot "config.json"
 $ThresholdPercent = 15 # Default
+ $DryRun = $false
 if (Test-Path $ConfigPath) {
     $Config = Get-Content $ConfigPath | ConvertFrom-Json # NASA Rule 5: Assert valid JSON
     if ($null -eq $Config) { throw "NASA Rule 5: Failed to parse config.json." }
+    if ($null -ne $Config.DryRun) { $DryRun = $Config.DryRun }
     if ($null -ne $Config.DiskSpaceThresholdPercent) {
         $ThresholdPercent = $Config.DiskSpaceThresholdPercent
     }
@@ -50,7 +52,7 @@ try {
     }
 
     if ($LowSpaceFound) {
-        Write-Warning "One or more drives have less than $ThresholdPercent% free space."
+        if (-not $DryRun) { Write-Warning "One or more drives have less than $ThresholdPercent% free space." }
         Stop-Transcript
         exit 1
     }

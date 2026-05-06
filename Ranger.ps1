@@ -15,9 +15,11 @@ Write-Host "Starting CPU Surveillance (Ranger)..." -ForegroundColor Cyan
 # --- CONFIGURATION ---
 $ConfigPath = Join-Path $PSScriptRoot "config.json"
 $CPUThresholdPercent = 70 # Default
+ $DryRun = $false
 if (Test-Path $ConfigPath) {
     $Config = Get-Content $ConfigPath | ConvertFrom-Json # NASA Rule 5: Assert valid JSON
     if ($null -eq $Config) { throw "NASA Rule 5: Failed to parse config.json." }
+    if ($null -ne $Config.DryRun) { $DryRun = $Config.DryRun }
     if ($null -ne $Config.CPUThresholdPercent) {
         $CPUThresholdPercent = $Config.CPUThresholdPercent
     }
@@ -74,7 +76,7 @@ try {
         Write-Host "No processes found exceeding $($CPUThresholdPercent)% CPU usage." -ForegroundColor Green
     }
 
-    if ($HighCPUProcessesFound) {
+    if ($HighCPUProcessesFound -and -not $DryRun) {
         Stop-Transcript
         exit 1
     }

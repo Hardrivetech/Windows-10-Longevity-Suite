@@ -12,6 +12,14 @@ Start-Transcript -Path $LogPath -Append
 
 Write-Host "Starting Disk Inspection (Inspector)..." -ForegroundColor Cyan
 
+# --- CONFIGURATION ---
+$ConfigPath = Join-Path $PSScriptRoot "config.json"
+$DryRun = $false
+if (Test-Path $ConfigPath) {
+    $Config = Get-Content $ConfigPath | ConvertFrom-Json # NASA Rule 5: Assert valid JSON
+    if ($null -ne $Config.DryRun) { $DryRun = $Config.DryRun }
+}
+
 try {
     # Retrieve all physical disks and their operational status
     $Disks = Get-PhysicalDisk
@@ -53,7 +61,7 @@ try {
     if ($FailureFound) {
         Write-Warning "Disk issues detected."
     }
-    if ($FailureFound) { Stop-Transcript; exit 1 }
+    if ($FailureFound -and -not $DryRun) { Stop-Transcript; exit 1 }
 }
 catch {
     Write-Error "An error occurred while inspecting disks: $_"

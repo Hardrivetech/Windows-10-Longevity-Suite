@@ -15,9 +15,11 @@ Write-Host "Starting Startup Optimization (Guard)..." -ForegroundColor Cyan
 # --- CONFIGURATION ---
 $ConfigPath = Join-Path $PSScriptRoot "config.json"
 $StartupBlacklist = @() # Default empty
+ $DryRun = $false
 if (Test-Path $ConfigPath) {
     $Config = Get-Content $ConfigPath | ConvertFrom-Json # NASA Rule 5: Assert valid JSON
     if ($null -eq $Config) { throw "NASA Rule 5: Failed to parse config.json." }
+    if ($null -ne $Config.DryRun) { $DryRun = $Config.DryRun }
     if ($null -ne $Config.Guard -and $null -ne $Config.Guard.StartupBlacklist) {
         $StartupBlacklist = $Config.Guard.StartupBlacklist
     }
@@ -49,9 +51,13 @@ try {
                         for ($k = 0; $k -lt $StartupBlacklist.Count; $k++) {
                             $App = $StartupBlacklist[$k]
                             if ($null -ne $App -and $Item.Name -like "*$App*") {
-                                Write-Host "Removing Registry Startup: $($Item.Name) from $Path" -ForegroundColor Yellow
-                                # NASA Rule 7: Check return values
-                                Remove-ItemProperty -Path $Path -Name $Item.Name -ErrorAction SilentlyContinue
+                                if ($DryRun) {
+                                    Write-Host "[DRY RUN] Would remove Registry Startup: $($Item.Name) from $Path" -ForegroundColor Gray
+                                } else {
+                                    Write-Host "Removing Registry Startup: $($Item.Name) from $Path" -ForegroundColor Yellow
+                                    # NASA Rule 7: Check return values
+                                    Remove-ItemProperty -Path $Path -Name $Item.Name -ErrorAction SilentlyContinue
+                                }
                             }
                         }
                     }
@@ -78,9 +84,13 @@ try {
                         for ($k = 0; $k -lt $StartupBlacklist.Count; $k++) {
                             $App = $StartupBlacklist[$k]
                             if ($null -ne $App -and $File.Name -like "*$App*") {
-                                Write-Host "Deleting Startup Shortcut: $($File.Name)" -ForegroundColor Yellow
-                                # NASA Rule 7: Check return values
-                                Remove-Item -Path $File.FullName -Force
+                                if ($DryRun) {
+                                    Write-Host "[DRY RUN] Would delete Startup Shortcut: $($File.Name)" -ForegroundColor Gray
+                                } else {
+                                    Write-Host "Deleting Startup Shortcut: $($File.Name)" -ForegroundColor Yellow
+                                    # NASA Rule 7: Check return values
+                                    Remove-Item -Path $File.FullName -Force
+                                }
                             }
                         }
                     }
@@ -107,8 +117,12 @@ try {
                     if ($null -ne $Task -and $null -ne $Task.State) {
                         if ($Task.State -ne "Disabled") {
                             Write-Host "Disabling Scheduled Task: $($Task.TaskName)" -ForegroundColor Yellow
-                            # NASA Rule 7: Check return values
-                            Disable-ScheduledTask -TaskName $Task.TaskName -Confirm:$false
+                            if ($DryRun) {
+                                Write-Host "[DRY RUN] Would disable Scheduled Task: $($Task.TaskName)" -ForegroundColor Gray
+                            } else {
+                                # NASA Rule 7: Check return values
+                                Disable-ScheduledTask -TaskName $Task.TaskName -Confirm:$false
+                            }
                         }
                     }
                 }

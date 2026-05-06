@@ -71,6 +71,14 @@ Describe "config.json Schema Validation" {
         }
     }
 
+    It "should have correct type for DryRun property" {
+        $PropName = "DryRun"
+        $ExpectedType = [bool]
+        $ActualValue = $LoadedConfig.$PropName
+        $ActualType = $ActualValue.GetType()
+        $ActualType | Should Be $ExpectedType `
+            -Because "Property '$PropName' should be of type '$ExpectedType'"
+    }
     # Add more 'It' blocks for other nested objects (Butler, Master) as needed
     # For Butler.ExtensionMap, you might need to iterate through its keys and check types.
 }
