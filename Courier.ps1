@@ -13,7 +13,6 @@ Start-Transcript -Path $LogPath -Append
 Write-Host "Checking for Deliveries (Courier)..." -ForegroundColor Cyan
 
 # --- CONFIGURATION ---
-$ConfigPath = Join-Path $PSScriptRoot "config.json"
 
 try {
     # NASA Rule 7: Check return values for COM object creation

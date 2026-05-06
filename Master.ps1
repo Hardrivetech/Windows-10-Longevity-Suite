@@ -165,7 +165,7 @@ function Invoke-SuiteReporting {
         [PSCustomObject]$Results,
         [bool]$EnableEmail,
         [System.Collections.Generic.List[string]]$Attachments,
-        [string]$SmtpCredentialPath,
+        [string]$SmtpAuthPath,
         [PSCustomObject]$SmtpConfig,
         [bool]$UseSSL
     )
@@ -183,8 +183,8 @@ function Invoke-SuiteReporting {
             if ($null -eq $HtmlBody) { throw "NASA Rule 5: Failed to generate HTML email body." }
             
             $Creds = $null
-            if (Test-Path $SmtpCredentialPath) {
-                $SecurePass = Get-Content $SmtpCredentialPath | ConvertTo-SecureString
+            if (Test-Path $SmtpAuthPath) {
+                $SecurePass = Get-Content $SmtpAuthPath | ConvertTo-SecureString
                 $Creds = New-Object System.Management.Automation.PSCredential($SmtpConfig.EmailUser, $SecurePass)
             }
 
@@ -313,7 +313,7 @@ if ($Config.Master.EnableHeartbeat) {
 }
 
 Invoke-SuiteReporting -Results $TaskResults -EnableEmail $EnableEmailReport -Attachments $AttachmentPaths `
-    -SmtpCredentialPath $CredentialFile -SmtpConfig $Config.Email -UseSSL $UseSSL
+    -SmtpAuthPath $CredentialFile -SmtpConfig $Config.Email -UseSSL $UseSSL
 
 Write-Host "`nMaster Orchestration Finished at: $(Get-Date)" -ForegroundColor Gray
 
