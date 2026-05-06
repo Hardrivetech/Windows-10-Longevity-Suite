@@ -49,11 +49,6 @@ if ($null -eq $Config.Email) {
     throw "NASA Rule 5: Email configuration section missing from config.json."
 }
 $EnableEmailReport = $Config.Email.EnableEmailReport
-$SmtpServer = $Config.Email.SmtpServer
-$SmtpPort   = $Config.Email.SmtpPort
-$FromEmail  = $Config.Email.FromEmail
-$ToEmail    = $Config.Email.ToEmail
-$EmailUser  = $Config.Email.EmailUser
 $UseSSL     = $true # Hardcoded for security best practice
 $DryRun     = $Config.DryRun
 
@@ -164,6 +159,55 @@ function Test-ConfigSchema {
     return $true
 }
 
+# NASA Rule 4: Extract complex reporting to a discrete function
+function Invoke-SuiteReporting {
+    param(
+        [PSCustomObject]$Results,
+        [bool]$EnableEmail,
+        [System.Collections.Generic.List[string]]$Attachments,
+        [string]$SmtpCredentialPath,
+        [PSCustomObject]$SmtpConfig,
+        [bool]$UseSSL
+    )
+
+    Write-Host "`n================================================" -ForegroundColor Cyan
+    Write-Host "   SUMMARY REPORT                              " -ForegroundColor Cyan
+    Write-Host "================================================" -ForegroundColor Cyan
+    $Results | Format-Table -AutoSize
+
+    if ($EnableEmail) {
+        Write-Host "`nSending Email Report..." -ForegroundColor Cyan
+        try {
+            $Header = "<style>table{border-collapse:collapse;width:100%;font-family:Arial;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#008B8B;color:white;}</style>"
+            $HtmlBody = $Results | ConvertTo-Html -Head $Header -PreContent "<h2>Maintenance Summary: $(hostname)</h2><p>Execution Date: $(Get-Date)</p>"
+            if ($null -eq $HtmlBody) { throw "NASA Rule 5: Failed to generate HTML email body." }
+            
+            $Creds = $null
+            if (Test-Path $SmtpCredentialPath) {
+                $SecurePass = Get-Content $SmtpCredentialPath | ConvertTo-SecureString
+                $Creds = New-Object System.Management.Automation.PSCredential($SmtpConfig.EmailUser, $SecurePass)
+            }
+
+            $MailParams = @{
+                SmtpServer  = $SmtpConfig.SmtpServer
+                Port        = $SmtpConfig.SmtpPort
+                From        = $SmtpConfig.FromEmail
+                To          = $SmtpConfig.ToEmail
+                Subject     = "Windows Maintenance Report - $(hostname) - $(Get-Date -Format 'yyyy-MM-dd')"
+                Body        = $HtmlBody | Out-String
+                BodyAsHtml  = $true
+                Credential  = $Creds
+                Attachments = $Attachments
+                UseSsl      = $UseSSL
+                ErrorAction = "Stop"
+            }
+            Send-MailMessage @MailParams
+            Write-Host "Email report sent successfully." -ForegroundColor Green
+        }
+        catch { Write-Error "Failed to send email report: $_" }
+    }
+}
+
 # The logical order of execution for maximum safety and efficiency
 $MaintenanceScripts = @(
     "Steward.ps1",        # 1. Create safety net before changes
@@ -268,88 +312,8 @@ if ($Config.Master.EnableHeartbeat) {
     Send-Heartbeat -Url $Config.Master.HeartbeatURL
 }
 
-Write-Host "`n================================================" -ForegroundColor Cyan
-Write-Host "   SUMMARY REPORT                              " -ForegroundColor Cyan
-Write-Host "================================================" -ForegroundColor Cyan
-# NASA Rule 4: Extract complex reporting to a discrete function
-function Invoke-SuiteReporting {
-    param($Results, $EnableEmail, $Attachments)
-
-$TaskResults | Format-Table -AutoSize
-    Write-Host "`n================================================" -ForegroundColor Cyan
-    Write-Host "   SUMMARY REPORT                              " -ForegroundColor Cyan
-    Write-Host "================================================" -ForegroundColor Cyan
-    $Results | Format-Table -AutoSize
-
-Write-Host "`nMaster Orchestration Finished at: $(Get-Date)" -ForegroundColor Gray
-    if ($EnableEmail) {
-        Write-Host "`nSending Email Report..." -ForegroundColor Cyan
-        try {
-            $Header = "<style>table{border-collapse:collapse;width:100%;font-family:Arial;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#008B8B;color:white;}</style>"
-            $HtmlBody = $Results | ConvertTo-Html -Head $Header -PreContent "<h2>Maintenance Summary: $(hostname)</h2>"
-            
-            $SecurePass = if (Test-Path $CredentialFile) { Get-Content $CredentialFile | ConvertTo-SecureString } else { $null }
-            $Creds = if ($null -ne $SecurePass) { New-Object System.Management.Automation.PSCredential($EmailUser, $SecurePass) } else { $null }
-
-# --- EMAIL REPORT GENERATION ---
-if ($EnableEmailReport) {
-    Write-Host "`nSending Email Report..." -ForegroundColor Cyan
-    try {
-        $Header = "<style>table{border-collapse:collapse;width:100%;font-family:Arial;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#008B8B;color:white;}</style>"
-        $HtmlBody = $TaskResults | ConvertTo-Html -Head $Header -PreContent "<h2>Maintenance Summary: $(hostname)</h2><p>Execution Date: $(Get-Date)</p>"
-        if ($null -eq $HtmlBody) { throw "NASA Rule 5: Failed to generate HTML email body." }
-        
-        # Load encrypted password
-        if (Test-Path $CredentialFile) {
-            $SecurePass = Get-Content $CredentialFile | ConvertTo-SecureString
-            # NASA Rule 7: Assert successful decryption
-            if ($null -eq $SecurePass) { throw "NASA Rule 7: Failed to decrypt SMTP password." }
-            $Creds = New-Object System.Management.Automation.PSCredential($EmailUser, $SecurePass)
-        } else {
-            Write-Warning "SMTP credential file not found. Cannot send email securely."
-            # If no credential file, try sending without credentials (might fail depending on SMTP server)
-            $Creds = $null
-            $MailParams = @{
-                SmtpServer  = $SmtpServer
-                Port        = $SmtpPort
-                From        = $FromEmail
-                To          = $ToEmail
-                Subject     = "Windows Maintenance Report - $(hostname)"
-                Body        = $HtmlBody | Out-String
-                BodyAsHtml  = $true
-                Credential  = $Creds
-                Attachments = $Attachments
-                UseSsl      = $UseSSL
-                ErrorAction = "Stop"
-            }
-            Send-MailMessage @MailParams
-            Write-Host "Email report sent successfully." -ForegroundColor Green
-        }
-
-        $MailParams = @{
-            SmtpServer  = $SmtpServer
-            Port        = $SmtpPort
-            From        = $FromEmail
-            To          = $ToEmail
-            Subject     = "Windows Maintenance Report - $(hostname) - $(Get-Date -Format 'yyyy-MM-dd')"
-            Body        = $HtmlBody
-            BodyAsHtml  = $true
-            Credential  = $Creds # Will be $null if no credential file
-            Attachments = $AttachmentPaths # Add all collected log files as attachments
-            UseSsl      = $UseSSL
-            ErrorAction = "Stop"
-        }
-        
-        Send-MailMessage @MailParams
-        Write-Host "Email report sent successfully." -ForegroundColor Green
-        catch { Write-Error "Failed to send email report: $_" }
-    }
-    catch {
-        Write-Error "Failed to send email report: $_"
-    }
-}
-
-Invoke-SuiteReporting -Results $TaskResults -EnableEmail $EnableEmailReport -Attachments $AttachmentPaths
+Invoke-SuiteReporting -Results $TaskResults -EnableEmail $EnableEmailReport -Attachments $AttachmentPaths `
+    -SmtpCredentialPath $CredentialFile -SmtpConfig $Config.Email -UseSSL $UseSSL
 
 Write-Host "`nMaster Orchestration Finished at: $(Get-Date)" -ForegroundColor Gray
 

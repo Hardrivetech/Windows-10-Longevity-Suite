@@ -113,7 +113,11 @@ function Invoke-SetupFlow {
     Write-Host "`n[1/7] Backup Configuration" -ForegroundColor Yellow
     $BackupPath = Read-Host "Enter backup destination path (Default: $($Config.BackupDestination))"
     if (-not [string]::IsNullOrWhiteSpace($BackupPath)) { $Config.BackupDestination = $BackupPath }
-    if (-not (Test-Path $Config.BackupDestination)) { Write-Warning "Warning: Backup path is currently unreachable." }
+    
+    # NASA Rule 5/7: Verify the backup path is reachable before proceeding
+    if (-not (Test-Path $Config.BackupDestination)) {
+        Write-Warning "Warning: Backup path '$($Config.BackupDestination)' is currently unreachable. Ensure it exists before running maintenance."
+    }
 
     Write-Host "`n[2/7] Performance Thresholds" -ForegroundColor Yellow
     $CpuLimit = Read-Host "CPU Usage Alert Threshold % (Default: $($Config.CPUThresholdPercent))"
