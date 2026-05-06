@@ -162,12 +162,12 @@ function Test-ConfigSchema {
 # NASA Rule 4: Extract complex reporting to a discrete function
 function Invoke-SuiteReporting {
     param(
-        [PSCustomObject]$Results,
-        [bool]$EnableEmail,
-        [System.Collections.Generic.List[string]]$Attachments,
-        [string]$SmtpAuthPath,
-        [PSCustomObject]$SmtpConfig,
-        [bool]$UseSSL
+        [Parameter(Mandatory=$true)]$Results,
+        [Parameter(Mandatory=$true)]$EnableEmail,
+        [Parameter(Mandatory=$true)]$Attachments,
+        [Parameter(Mandatory=$true)][string]$SmtpAuthPath,
+        [Parameter(Mandatory=$true)]$SmtpConfig,
+        [bool]$UseSsl = $true
     )
 
     Write-Host "`n================================================" -ForegroundColor Cyan
@@ -180,7 +180,6 @@ function Invoke-SuiteReporting {
         try {
             $Header = "<style>table{border-collapse:collapse;width:100%;font-family:Arial;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#008B8B;color:white;}</style>"
             $HtmlBody = $Results | ConvertTo-Html -Head $Header -PreContent "<h2>Maintenance Summary: $(hostname)</h2><p>Execution Date: $(Get-Date)</p>"
-            if ($null -eq $HtmlBody) { throw "NASA Rule 5: Failed to generate HTML email body." }
             
             $Creds = $null
             if (Test-Path $SmtpAuthPath) {
@@ -198,7 +197,7 @@ function Invoke-SuiteReporting {
                 BodyAsHtml  = $true
                 Credential  = $Creds
                 Attachments = $Attachments
-                UseSsl      = $UseSSL
+                UseSsl      = $UseSsl
                 ErrorAction = "Stop"
             }
             Send-MailMessage @MailParams
@@ -312,9 +311,7 @@ if ($Config.Master.EnableHeartbeat) {
     Send-Heartbeat -Url $Config.Master.HeartbeatURL
 }
 
-Invoke-SuiteReporting -Results $TaskResults -EnableEmail $EnableEmailReport -Attachments $AttachmentPaths `
-    -SmtpAuthPath $CredentialFile -SmtpConfig $Config.Email -UseSSL $UseSSL
+Invoke-SuiteReporting -Results $TaskResults -EnableEmail $EnableEmailReport -Attachments $AttachmentPaths -SmtpAuthPath $CredentialFile -SmtpConfig $Config.Email -UseSsl $UseSSL
 
 Write-Host "`nMaster Orchestration Finished at: $(Get-Date)" -ForegroundColor Gray
-
 Stop-Transcript

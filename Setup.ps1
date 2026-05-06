@@ -114,9 +114,34 @@ function Invoke-SetupFlow {
     $BackupPath = Read-Host "Enter backup destination path (Default: $($Config.BackupDestination))"
     if (-not [string]::IsNullOrWhiteSpace($BackupPath)) { $Config.BackupDestination = $BackupPath }
     
-    # NASA Rule 5/7: Verify the backup path is reachable before proceeding
-    if (-not (Test-Path $Config.BackupDestination)) {
-        Write-Warning "Warning: Backup path '$($Config.BackupDestination)' is currently unreachable. Ensure it exists before running maintenance."
+    # NASA Rule 5/7: Verify the backup path is reachable and writable
+    try {
+        if (-not (Test-Path $Config.BackupDestination)) {
+            Write-Warning "Warning: Backup path '$($Config.BackupDestination)' is currently unreachable. Ensure it exists before running maintenance."
+        } elseif (-not (Test-Path $Config.BackupDestination -PathType Container)) {
+            Write-Warning "Warning: Backup path '$($Config.BackupDestination)' is not a directory. Please provide a valid folder path."
+        } else {
+            # Attempt to create a temporary file to test write permissions
+            $testFile = Join-Path $Config.BackupDestination "test_write_$(Get-Random).tmp"
+            Set-Content -Path $testFile -Value "test" -ErrorAction Stop
+            Remove-Item -Path $testFile -Force -ErrorAction Stop
+            Write-Host "Backup path '$($Config.BackupDestination)' is reachable and writable." -ForegroundColor Green
+        }
+    } catch {
+        Write-Warning "Error testing backup path '$($Config.BackupDestination)': $($_.Exception.Message). Please verify permissions."
+    }
+
+    # NASA Rule 5/7: Check System Restore status
+    Write-Host "`nChecking System Restore Status..." -ForegroundColor Yellow
+    $osDrive = (Get-Volume -DriveType Fixed | Where-Object { $_.DriveLetter -eq 'C' }).DriveLetter
+    $srStatus = Get-ComputerRestorePoint -ErrorAction SilentlyContinue | Select-Object -First 1 | Select-Object -ExpandProperty Enable
+    if ($null -eq $srStatus -or -not $srStatus) {
+        Write-Warning "System Restore is currently DISABLED for drive '$osDrive'. Steward.ps1 will attempt to enable it, but manual verification is recommended."
+        $EnableSR = Get-UserChoice -Prompt "Do you want to attempt to enable System Restore now? (Requires reboot for full effect)" -Options @("y", "n")
+        if ($EnableSR -eq 'y') {
+            try { Enable-ComputerRestore -Drive $osDrive -ErrorAction Stop; Write-Host "Attempted to enable System Restore. A reboot may be required." -ForegroundColor Green }
+            catch { Write-Warning "Failed to enable System Restore: $($_.Exception.Message). Please enable it manually." }
+        }
     }
 
     Write-Host "`n[2/7] Performance Thresholds" -ForegroundColor Yellow
@@ -200,6 +225,19 @@ try {
 
             $User = Read-Host "SMTP Username (Default: $($Config.Email.EmailUser))"
             if (-not [string]::IsNullOrWhiteSpace($User)) { $Config.Email.EmailUser = $User }
+
+            # NASA Rule 5/7: Verify SMTP server reachability
+            Write-Host "`nChecking SMTP Server Reachability..." -ForegroundColor Yellow
+            try {
+                $testConnection = Test-NetConnection -ComputerName $Config.Email.SmtpServer -Port $Config.Email.SmtpPort -InformationLevel Detailed -ErrorAction Stop
+                if ($testConnection.TcpTestSucceeded) {
+                    Write-Host "SMTP server '$($Config.Email.SmtpServer):$($Config.Email.SmtpPort)' is reachable." -ForegroundColor Green
+                } else {
+                    Write-Warning "SMTP server '$($Config.Email.SmtpServer):$($Config.Email.SmtpPort)' is not reachable. Email reports may fail."
+                }
+            } catch {
+                Write-Warning "Failed to test SMTP server reachability: $($_.Exception.Message). Email reports may fail."
+            }
 
             # Securely store password
             Write-Host "Enter SMTP Password (will be encrypted):" -ForegroundColor Yellow
