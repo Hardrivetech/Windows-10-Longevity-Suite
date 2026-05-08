@@ -133,8 +133,8 @@ function Invoke-SetupFlow {
 
     # NASA Rule 5/7: Check System Restore status
     Write-Host "`nChecking System Restore Status..." -ForegroundColor Yellow
-    $osDrive = (Get-Volume -DriveType Fixed | Where-Object { $_.DriveLetter -eq 'C' }).DriveLetter
-    $srStatus = Get-ComputerRestorePoint -ErrorAction SilentlyContinue | Select-Object -First 1 | Select-Object -ExpandProperty Enable
+    $osDrive = (Get-Volume | Where-Object { $_.DriveLetter -eq 'C' }).DriveLetter
+    $srStatus = Get-ComputerRestorePoint -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $srStatus -or -not $srStatus) {
         Write-Warning "System Restore is currently DISABLED for drive '$osDrive'. Steward.ps1 will attempt to enable it, but manual verification is recommended."
         $EnableSR = Get-UserChoice -Prompt "Do you want to attempt to enable System Restore now? (Requires reboot for full effect)" -Options @("y", "n")
@@ -195,11 +195,23 @@ try {
         }
 
         # Load existing config or create new
-        $Config = if (Test-Path $ConfigFile) {
+        $Config = Initialize-DefaultConfig
+        if (Test-Path $ConfigFile) {
             Write-Host "Loading existing configuration from $ConfigFile..." -ForegroundColor Gray
-            Get-Content $ConfigFile | ConvertFrom-Json
-        } else {
-            Initialize-DefaultConfig
+            $LoadedConfig = Get-Content $ConfigFile | ConvertFrom-Json
+            if ($null -ne $LoadedConfig) {
+                # Merge loaded config into defaults. This ensures that even if the config file 
+                # is missing properties, the object has them (required for PS 5.1).
+                foreach ($prop in $LoadedConfig.PSObject.Properties) {
+                    if ($prop.Value -is [System.Management.Automation.PSCustomObject] -and $null -ne $Config.$($prop.Name) -and $Config.$($prop.Name) -is [System.Management.Automation.PSCustomObject]) {
+                        foreach ($subProp in $prop.Value.PSObject.Properties) {
+                            $Config.$($prop.Name).$($subProp.Name) = $subProp.Value
+                        }
+                    } else {
+                        $Config.$($prop.Name) = $prop.Value
+                    }
+                }
+            }
         }
 
         # Modular Configuration Flow
